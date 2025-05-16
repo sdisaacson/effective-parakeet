@@ -1,210 +1,290 @@
-import instructor
-from openai import AsyncOpenAI
-from typing import Iterable, List, Optional
-from enum import Enum
-from pydantic import BaseModel, Field
-from fastapi import FastAPI, Request, Form, HTTPException
-from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse
-import os
-import json
-import logging
-import traceback
-from dotenv import load_dotenv
+# main.py
+from fastapi import FastAPI, Depends, HTTPException, status
+from .app import models
+from sqlalchemy.orm import Session
+from sqlalchemy import create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from typing import List, Optional
 
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-)
-logger = logging.getLogger(__name__)
+from .app import schemas
 
-# Load environment variables from .env file
-load_dotenv()
+# Database configuration
+SQLALCHEMY_DATABASE_URL = "postgresql://user:password@localhost/actionitems"
+engine = create_engine(SQLALCHEMY_DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Create FastAPI app
-app = FastAPI(title="Action Item Extractor")
+app = FastAPI(title="Action Item Extractor API")
 
-# Mount static files and templates
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
-class PriorityEnum(str, Enum):
-    high = "High"
-    medium = "Medium"
-    low = "Low"
-
-
-class Subtask(BaseModel):
-    """Correctly resolved subtask from the given transcript"""
-    id: int
-    name: str
-
-
-class Goal(BaseModel):
-    """Correctly resolved goal from the given transcript"""
-    id: int
-    name: str
-    description: str
-    priority: PriorityEnum
-    assignees: List[str]
-    subtasks: Optional[List[Subtask]] = []
-    dependencies: Optional[List[int]] = []
-    meeting_id: Optional[int] = None  # Reference to the meeting this goal belongs to
-
-
-class Meeting(BaseModel):
-    """Structured information about the meeting from the transcript"""
-    id: int = Field(description="Unique identifier for the meeting")
-    title: str = Field(description="Meeting title or purpose")
-    date: Optional[str] = Field(None, description="Meeting date if mentioned")
-    summary: str = Field(description="Brief summary of the meeting")
-
-# Service functions
-async def generate_goals(transcript: str, meeting_id: int) -> List[Goal]:
-    """Generate goals from a transcript using OpenAI"""
-    # Check for API key
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        logger.error("OpenAI API key not found in environment variables")
-        raise HTTPException(status_code=500, detail="OpenAI API key not found. Please set OPENAI_API_KEY environment variable.")
-    
-    logger.info("Creating AsyncOpenAI client with API key")
-    # Create AsyncOpenAI client with instructor
+# Dependency to get DB session
+def get_db():
+    db = SessionLocal()
     try:
-        client = instructor.from_openai(AsyncOpenAI(api_key=api_key))
-        logger.debug("AsyncOpenAI client created successfully")
-    except Exception as e:
-        logger.error(f"Error creating AsyncOpenAI client: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error creating AsyncOpenAI client: {str(e)}")
-    
-     try:
-        logger.info("Making async API call to generate goals")
-        response = await client.chat.completions.create(
-            model="gpt-4o",
-            response_model=Iterable[Goal],
-            messages=[
-                {
-                    "role": "system",
-                    "content": "The following is a transcript of a meeting. Extract the action items, goals, subtasks, assignees, and dependencies.",
-                },
-                {
-                    "role": "user",
-                    "content": f"Create the action items and goals for the following transcript: {transcript}",
-                },
-            ],
-        )
-        # Properly handle the async generator
-        goals = []
-        async for goal in response:
-            # Set the meeting_id for each goal
-            goal.meeting_id = meeting_id
-            goals.append(goal)
-        
-        logger.info(f"Successfully generated {len(goals)} goals")
-        return goals
-        
-        logger.info(f"Successfully generated {len(goals)} goals")
-        return goals
-    except Exception as e:
-        logger.error(f"Error generating goals: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error generating goals: {str(e)}")
+        yield db
+    finally:
+        db.close()
 
-async def extract_meeting_info(transcript: str) -> Meeting:
-    """Extract structured meeting information from transcripts."""
-    # Check for API key
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        logger.error("OpenAI API key not found in environment variables")
-        raise HTTPException(status_code=500, detail="OpenAI API key not found. Please set OPENAI_API_KEY environment variable.")
-    
-    try:
-        client = instructor.from_openai(AsyncOpenAI(api_key=api_key))
-        
-        response = await client.chat.completions.create(
-            model="gpt-4o",
-            response_model=Meeting,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "Extract detailed meeting information from this file."
-                },
-                {
-                    "role": "user",
-                    "content": f"Extract the complete meeting details from this file: {transcript}"
-                }
-            ]
-        )
-        
-        logger.info(f"Successfully extracted meeting information: {response}")
-        return response
-    except Exception as e:
-        logger.error(f"Error extracting meeting information: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error extracting meeting information: {str(e)}")
-# Routes
-@app.get("/", response_class=HTMLResponse)
-async def read_root(request: Request):
-    """Render the main page"""
-    logger.info("Rendering index page")
-    return templates.TemplateResponse("index.html", {"request": request})
+# Meeting endpoints
+@app.post("/meetings/", response_model=schemas.Meeting, status_code=status.HTTP_201_CREATED)
+def create_meeting(meeting: schemas.MeetingCreate, db: Session = Depends(get_db)):
+    db_meeting = models.Meeting(**meeting.dict())
+    db.add(db_meeting)
+    db.commit()
+    db.refresh(db_meeting)
+    return db_meeting
 
-# Update the /process endpoint
-@app.post("/process")
-async def process_transcript(transcript: str = Form(...)):
-    """Process a transcript and return goals and meeting information"""
-    logger.info("Received request to process transcript")
-    logger.debug(f"Transcript length: {len(transcript)} characters")
-    
-    try:
-        # Generate goals from transcript
-        logger.info("Generating goals from transcript")
-        goals = await generate_goals(transcript)
-        
-        # Extract meeting information
-        logger.info("Extracting meeting information from transcript")
-        meeting_info = await extract_meeting_info(transcript)
-        goals_dict = []
-        for goal in goals:
-            try:
-                goal_dict = goal.dict()
-                goals_dict.append(goal_dict)
-            except Exception as e:
-                logger.error(f"Error converting goal to dict: {str(e)}")
-                logger.error(f"Problematic goal: {goal}")
-                logger.error(traceback.format_exc())
-                raise HTTPException(status_code=500, detail=f"Error processing goal data: {str(e)}")
-        
-        meeting_dict = meeting_info.dict()
-        
-        logger.info(f"Successfully processed {len(goals_dict)} goals and meeting information")
-        logger.debug(f"Goals data: {json.dumps(goals_dict)}")
-        logger.debug(f"Meeting info: {json.dumps(meeting_dict)}")
-        
-        return JSONResponse(content={"goals": goals_dict, "meeting": meeting_dict})
-    except HTTPException as e:
-        logger.error(f"HTTP exception occurred: {e.detail}")
-        raise e
-    except Exception as e:
-        logger.error(f"Unexpected error processing transcript: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error processing transcript: {str(e)}")
+@app.get("/meetings/", response_model=List[schemas.Meeting])
+def read_meetings(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    meetings = db.query(models.Meeting).offset(skip).limit(limit).all()
+    return meetings
 
-# For development server with better error reporting
-if __name__ == "__main__":
-    import uvicorn
+@app.get("/meetings/{meeting_id}", response_model=schemas.MeetingWithGoals)
+def read_meeting(meeting_id: int, db: Session = Depends(get_db)):
+    db_meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id).first()
+    if db_meeting is None:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    return db_meeting
+
+@app.put("/meetings/{meeting_id}", response_model=schemas.Meeting)
+def update_meeting(meeting_id: int, meeting: schemas.MeetingCreate, db: Session = Depends(get_db)):
+    db_meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id).first()
+    if db_meeting is None:
+        raise HTTPException(status_code=404, detail="Meeting not found")
     
-    # Log startup information
-    logger.info("Starting Action Item Extractor application")
-    logger.info(f"OpenAI API key set: {bool(os.getenv('OPENAI_API_KEY'))}")
+    for key, value in meeting.dict().items():
+        setattr(db_meeting, key, value)
     
-    # Print directory structure for debugging
-    logger.info("Directory structure:")
-    for root, dirs, files in os.walk('.', topdown=True):
-        for name in files:
-            logger.info(os.path.join(root, name))
+    db.add(db_meeting)
+    db.commit()
+    db.refresh(db_meeting)
+    return db_meeting
+
+@app.delete("/meetings/{meeting_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_meeting(meeting_id: int, db: Session = Depends(get_db)):
+    db_meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id).first()
+    if db_meeting is None:
+        raise HTTPException(status_code=404, detail="Meeting not found")
     
-    # Start the server
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    db.delete(db_meeting)
+    db.commit()
+    return None
+
+# Goal endpoints
+@app.post("/meetings/{meeting_id}/goals/", response_model=schemas.Goal, status_code=status.HTTP_201_CREATED)
+def create_goal(meeting_id: int, goal: schemas.GoalCreate, db: Session = Depends(get_db)):
+    # Check if meeting exists
+    db_meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id).first()
+    if db_meeting is None:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    # Create goal
+    goal_data = goal.dict(exclude={"assignee_ids", "dependency_ids", "subtasks"})
+    db_goal = models.Goal(**goal_data, meeting_id=meeting_id)
+    db.add(db_goal)
+    db.flush()  # Flush to get the goal ID
+    
+    # Add assignees
+    if goal.assignee_ids:
+        assignees = db.query(models.Assignee).filter(models.Assignee.id.in_(goal.assignee_ids)).all()
+        db_goal.assignees = assignees
+    
+    # Add dependencies
+    if goal.dependency_ids:
+        for dep_id in goal.dependency_ids:
+            # Check if the dependency exists
+            dependency = db.query(models.Goal).filter(models.Goal.id == dep_id).first()
+            if not dependency:
+                continue
+            
+            # Create the dependency
+            db_dependency = models.Dependency(dependent_goal_id=db_goal.id, dependency_goal_id=dep_id)
+            db.add(db_dependency)
+    
+    # Add subtasks
+    if goal.subtasks:
+        for subtask in goal.subtasks:
+            db_subtask = models.Subtask(**subtask.dict(), goal_id=db_goal.id)
+            db.add(db_subtask)
+    
+    db.commit()
+    db.refresh(db_goal)
+    return db_goal
+
+@app.get("/meetings/{meeting_id}/goals/", response_model=List[schemas.Goal])
+def read_goals(meeting_id: int, db: Session = Depends(get_db)):
+    # Check if meeting exists
+    db_meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id).first()
+    if db_meeting is None:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    goals = db.query(models.Goal).filter(models.Goal.meeting_id == meeting_id).all()
+    return goals
+
+@app.get("/goals/{goal_id}", response_model=schemas.GoalWithDependencies)
+def read_goal(goal_id: int, db: Session = Depends(get_db)):
+    db_goal = db.query(models.Goal).filter(models.Goal.id == goal_id).first()
+    if db_goal is None:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    return db_goal
+
+@app.put("/goals/{goal_id}", response_model=schemas.Goal)
+def update_goal(goal_id: int, goal: schemas.GoalCreate, db: Session = Depends(get_db)):
+    db_goal = db.query(models.Goal).filter(models.Goal.id == goal_id).first()
+    if db_goal is None:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    
+    # Update basic fields
+    for key, value in goal.dict(exclude={"assignee_ids", "dependency_ids", "subtasks"}).items():
+        setattr(db_goal, key, value)
+    
+    # Update assignees if provided
+    if goal.assignee_ids is not None:
+        assignees = db.query(models.Assignee).filter(models.Assignee.id.in_(goal.assignee_ids)).all()
+        db_goal.assignees = assignees
+    
+    # Update dependencies if provided
+    if goal.dependency_ids is not None:
+        # Remove existing dependencies
+        db.query(models.Dependency).filter(models.Dependency.dependent_goal_id == goal_id).delete()
+        
+        # Add new dependencies
+        for dep_id in goal.dependency_ids:
+            # Check for circular dependencies
+            if dep_id == goal_id:
+                continue
+                
+            # Check if dependency exists
+            dependency = db.query(models.Goal).filter(models.Goal.id == dep_id).first()
+            if not dependency:
+                continue
+            
+            # Create the dependency
+            db_dependency = models.Dependency(dependent_goal_id=goal_id, dependency_goal_id=dep_id)
+            db.add(db_dependency)
+    
+    db.add(db_goal)
+    db.commit()
+    db.refresh(db_goal)
+    return db_goal
+
+@app.delete("/goals/{goal_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_goal(goal_id: int, db: Session = Depends(get_db)):
+    db_goal = db.query(models.Goal).filter(models.Goal.id == goal_id).first()
+    if db_goal is None:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    
+    db.delete(db_goal)
+    db.commit()
+    return None
+
+# Subtask endpoints
+@app.post("/goals/{goal_id}/subtasks/", response_model=schemas.Subtask, status_code=status.HTTP_201_CREATED)
+def create_subtask(goal_id: int, subtask: schemas.SubtaskCreate, db: Session = Depends(get_db)):
+    # Check if goal exists
+    db_goal = db.query(models.Goal).filter(models.Goal.id == goal_id).first()
+    if db_goal is None:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    
+    db_subtask = models.Subtask(**subtask.dict(), goal_id=goal_id)
+    db.add(db_subtask)
+    db.commit()
+    db.refresh(db_subtask)
+    return db_subtask
+
+@app.get("/goals/{goal_id}/subtasks/", response_model=List[schemas.Subtask])
+def read_subtasks(goal_id: int, db: Session = Depends(get_db)):
+    # Check if goal exists
+    db_goal = db.query(models.Goal).filter(models.Goal.id == goal_id).first()
+    if db_goal is None:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    
+    subtasks = db.query(models.Subtask).filter(models.Subtask.goal_id == goal_id).all()
+    return subtasks
+
+@app.put("/subtasks/{subtask_id}", response_model=schemas.Subtask)
+def update_subtask(subtask_id: int, subtask: schemas.SubtaskCreate, db: Session = Depends(get_db)):
+    db_subtask = db.query(models.Subtask).filter(models.Subtask.id == subtask_id).first()
+    if db_subtask is None:
+        raise HTTPException(status_code=404, detail="Subtask not found")
+    
+    for key, value in subtask.dict().items():
+        setattr(db_subtask, key, value)
+    
+    db.add(db_subtask)
+    db.commit()
+    db.refresh(db_subtask)
+    return db_subtask
+
+@app.delete("/subtasks/{subtask_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_subtask(subtask_id: int, db: Session = Depends(get_db)):
+    db_subtask = db.query(models.Subtask).filter(models.Subtask.id == subtask_id).first()
+    if db_subtask is None:
+        raise HTTPException(status_code=404, detail="Subtask not found")
+    
+    db.delete(db_subtask)
+    db.commit()
+    return None
+
+# Assignee endpoints
+@app.post("/assignees/", response_model=schemas.Assignee, status_code=status.HTTP_201_CREATED)
+def create_assignee(assignee: schemas.AssigneeCreate, db: Session = Depends(get_db)):
+    # Check if assignee with this name already exists
+    db_assignee = db.query(models.Assignee).filter(models.Assignee.name == assignee.name).first()
+    if db_assignee:
+        return db_assignee
+    
+    db_assignee = models.Assignee(**assignee.dict())
+    db.add(db_assignee)
+    db.commit()
+    db.refresh(db_assignee)
+    return db_assignee
+
+@app.get("/assignees/", response_model=List[schemas.Assignee])
+def read_assignees(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    assignees = db.query(models.Assignee).offset(skip).limit(limit).all()
+    return assignees
+
+# Dependency management endpoints
+@app.post("/dependencies/", status_code=status.HTTP_201_CREATED)
+def create_dependency(dependency: schemas.DependencyCreate, db: Session = Depends(get_db)):
+    # Check if both goals exist
+    dependent_goal = db.query(models.Goal).filter(models.Goal.id == dependency.dependent_goal_id).first()
+    dependency_goal = db.query(models.Goal).filter(models.Goal.id == dependency.dependency_goal_id).first()
+    
+    if not dependent_goal or not dependency_goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    
+    # Check for self-dependency
+    if dependency.dependent_goal_id == dependency.dependency_goal_id:
+        raise HTTPException(status_code=400, detail="A goal cannot depend on itself")
+    
+    # Check if the dependency already exists
+    existing_dependency = db.query(models.Dependency).filter(
+        models.Dependency.dependent_goal_id == dependency.dependent_goal_id,
+        models.Dependency.dependency_goal_id == dependency.dependency_goal_id
+    ).first()
+    
+    if existing_dependency:
+        return {"message": "Dependency already exists"}
+    
+    # Create the dependency
+    db_dependency = models.Dependency(**dependency.dict())
+    db.add(db_dependency)
+    db.commit()
+    
+    return {"message": "Dependency created successfully"}
+
+@app.delete("/dependencies/", status_code=status.HTTP_204_NO_CONTENT)
+def delete_dependency(dependency: schemas.DependencyDelete, db: Session = Depends(get_db)):
+    # Check if the dependency exists
+    db_dependency = db.query(models.Dependency).filter(
+        models.Dependency.dependent_goal_id == dependency.dependent_goal_id,
+        models.Dependency.dependency_goal_id == dependency.dependency_goal_id
+    ).first()
+    
+    if db_dependency is None:
+        raise HTTPException(status_code=404, detail="Dependency not found")
+    
+    db.delete(db_dependency)
+    db.commit()
+    return None
