@@ -27,116 +27,89 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // Form submission
-    //Update the original form submission handler
-form.addEventListener('submit', async function(e) {
-    e.preventDefault();
-    
-    // Show loading indicator
-    loadingIndicator.style.display = 'block';
-    resultsContainer.style.display = 'none';
-    
-    const transcript = document.getElementById('transcript').value;
-    
-    try {
-        const formData = new FormData();
-        formData.append('transcript', transcript);
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
         
-        console.log('Submitting transcript to /process endpoint');
-        const response = await fetch('/process', {
-            method: 'POST',
-            body: formData
-        });
+        // Show loading indicator
+        loadingIndicator.style.display = 'block';
+        resultsContainer.style.display = 'none';
         
-        console.log('Response status:', response.status);
-        const data = await response.json();
-        console.log('Response data:', data);
+        const transcript = document.getElementById('transcript').value;
         
-        if (response.ok) {
-            // Process and display the results with meeting info
-            renderResults(data.goals, data.meeting);
+        try {
+            const formData = new FormData();
+            formData.append('transcript', transcript);
             
-            // Hide loading indicator, show results
+            console.log('Submitting transcript to /process endpoint');
+            const response = await fetch('/process', {
+                method: 'POST',
+                body: formData
+            });
+            
+            console.log('Response status:', response.status);
+            const data = await response.json();
+            console.log('Response data:', data);
+            
+            if (response.ok) {
+                // Process and display the results with meeting info
+                renderResults(data.goals, data.meeting);
+                
+                // Hide loading indicator, show results
+                loadingIndicator.style.display = 'none';
+                resultsContainer.style.display = 'block';
+            } else {
+                // Handle errors
+                console.error('API error:', data.detail || 'Unknown error');
+                throw new Error(data.detail || 'An error occurred');
+            }
+        } catch (error) {
+            console.error('Error processing transcript:', error);
             loadingIndicator.style.display = 'none';
-            resultsContainer.style.display = 'block';
-        } else {
-            // Handle errors
-            console.error('API error:', data.detail || 'Unknown error');
-            throw new Error(data.detail || 'An error occurred');
+            alert(`Error: ${error.message}`);
         }
-    } catch (error) {
-        console.error('Error processing transcript:', error);
-        loadingIndicator.style.display = 'none';
-        alert(`Error: ${error.message}`);
-    }
-});
-
-// Update the renderResults function to include meeting info
-function renderResults(goals, meeting) {
-    // Clear previous results
-    goalsGrid.innerHTML = '';
-    goalsTableBody.innerHTML = '';
-    document.getElementById('team-container').innerHTML = '';
-    
-    // Render meeting information if available
-    if (meeting) {
-        renderMeetingInfo(meeting);
-    }
-    
-    // Get all assignees
-    const allAssignees = getAllAssignees(goals);
-    
-    // Render team members section
-    renderTeamMembers(allAssignees, goals);
-    
-    // Render knowledge graph visualization
-    renderKnowledgeGraph(goals, allAssignees);
-    
-    // Render goals in grid view
-    goals.forEach(goal => {
-        renderGoalCard(goal, goals);
-        renderGoalRow(goal, goals);
     });
-    
-    // Initialize zoom and layout buttons
-    initGraphControls();
-}
 
-// Add the renderMeetingInfo function inside the DOMContentLoaded event handler
-function renderMeetingInfo(meeting) {
-    console.log('Rendering meeting info:', meeting);
-    const meetingContainer = document.getElementById('meeting-info-container');
-    
-    if (meeting) {
-        // Show the container
-        meetingContainer.style.display = 'block';
+    // Render meeting information
+    function renderMeetingInfo(meeting) {
+        console.log('Rendering meeting info:', meeting);
+        const meetingContainer = document.getElementById('meeting-info-container');
         
-        // Set meeting title
-        const titleElement = document.getElementById('meeting-title');
-        titleElement.textContent = meeting.title || 'Untitled Meeting';
-        
-        // Set meeting date if available
-        const dateElement = document.getElementById('meeting-date');
-        if (meeting.date) {
-            dateElement.innerHTML = `<i class="fas fa-calendar-alt me-2"></i>${meeting.date}`;
+        if (meeting) {
+            // Show the container
+            meetingContainer.style.display = 'block';
+            
+            // Set meeting title
+            const titleElement = document.getElementById('meeting-title');
+            titleElement.textContent = meeting.title || 'Untitled Meeting';
+            
+            // Set meeting date if available
+            const dateElement = document.getElementById('meeting-date');
+            if (meeting.date) {
+                dateElement.innerHTML = `<i class="fas fa-calendar-alt me-2"></i>${meeting.date}`;
+            } else {
+                dateElement.innerHTML = ''; // No date available
+            }
+            
+            // Set meeting summary
+            const summaryElement = document.getElementById('meeting-summary');
+            summaryElement.textContent = meeting.summary || 'No summary available';
         } else {
-            dateElement.innerHTML = ''; // No date available
+            // Hide the container if no meeting info
+            meetingContainer.style.display = 'none';
         }
-        
-        // Set meeting summary
-        const summaryElement = document.getElementById('meeting-summary');
-        summaryElement.textContent = meeting.summary || 'No summary available';
-    } else {
-        // Hide the container if no meeting info
-        meetingContainer.style.display = 'none';
     }
-}
     
     // Render the results
-    function renderResults(goals) {
+    function renderResults(goals, meeting) {
         // Clear previous results
         goalsGrid.innerHTML = '';
         goalsTableBody.innerHTML = '';
         document.getElementById('team-container').innerHTML = '';
+        
+        // Render meeting information if available
+        if (meeting) {
+            renderMeetingInfo(meeting);
+        }
         
         // Get all assignees
         const allAssignees = getAllAssignees(goals);
@@ -369,23 +342,26 @@ function renderMeetingInfo(meeting) {
             // Add subtask nodes and edges
             if (goal.subtasks && goal.subtasks.length > 0) {
                 goal.subtasks.forEach(subtask => {
+                    // Create a unique ID for subtasks by combining goal ID and subtask ID
+                    const uniqueSubtaskId = `subtask-${goal.id}-${subtask.id}`;
+                    
                     cy.add({
                         group: 'nodes',
                         data: {
-                            id: `subtask-${subtask.id}`,
+                            id: uniqueSubtaskId,
                             label: subtask.name,
                             type: 'subtask'
                         },
                         classes: 'subtask'
                     });
                     
-                    // Add edge from goal to subtask
+                    // Add edge from goal to subtask (with updated target ID)
                     cy.add({
                         group: 'edges',
                         data: {
                             id: `goal-${goal.id}-subtask-${subtask.id}`,
                             source: `goal-${goal.id}`,
-                            target: `subtask-${subtask.id}`,
+                            target: uniqueSubtaskId,
                             type: 'subtask'
                         },
                         classes: 'subtask'
@@ -762,34 +738,5 @@ function showGoalInGraph(goalId) {
                 node.removeClass('highlighted');
             }, 2000);
         }
-    }
-}
-// Add a new function to render meeting info
-function renderMeetingInfo(meeting) {
-    console.log('Rendering meeting info:', meeting);
-    const meetingContainer = document.getElementById('meeting-info-container');
-    
-    if (meeting) {
-        // Show the container
-        meetingContainer.style.display = 'block';
-        
-        // Set meeting title
-        const titleElement = document.getElementById('meeting-title');
-        titleElement.textContent = meeting.title || 'Untitled Meeting';
-        
-        // Set meeting date if available
-        const dateElement = document.getElementById('meeting-date');
-        if (meeting.date) {
-            dateElement.innerHTML = `<i class="fas fa-calendar-alt me-2"></i>${meeting.date}`;
-        } else {
-            dateElement.innerHTML = ''; // No date available
-        }
-        
-        // Set meeting summary
-        const summaryElement = document.getElementById('meeting-summary');
-        summaryElement.textContent = meeting.summary || 'No summary available';
-    } else {
-        // Hide the container if no meeting info
-        meetingContainer.style.display = 'none';
     }
 }
