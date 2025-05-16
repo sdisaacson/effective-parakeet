@@ -764,21 +764,6 @@ function showGoalInGraph(goalId) {
         }
     }
 }
-
-    
-    // Render knowledge graph visualization
-    renderKnowledgeGraph(goals, allAssignees);
-    
-    // Render goals in grid view
-    goals.forEach(goal => {
-        renderGoalCard(goal, goals);
-        renderGoalRow(goal, goals);
-    });
-    
-    // Initialize zoom and layout buttons
-    initGraphControls();
-}
-
 // Add a new function to render meeting info
 function renderMeetingInfo(meeting) {
     console.log('Rendering meeting info:', meeting);
