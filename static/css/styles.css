@@ -381,3 +381,116 @@
 #add-goal-btn:active {
     transform: translateY(0);
 }
+/* Add button hover styles */
+.remove-goal-btn {
+    transition: all 0.2s;
+}
+
+.remove-goal-btn:hover {
+    background-color: #dc3545;
+    color: white;
+}
+
+/* Add animation for goal removal */
+@keyframes fade-out {
+    from {
+        opacity: 1;
+        transform: translateX(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateX(15px);
+    }
+}
+
+.removing {
+    animation: fade-out 0.3s ease-out forwards;
+}
+
+/* Style for delete confirmation dialog */
+.swal2-popup {
+    font-size: 1rem !important;
+}
+
+.swal2-title {
+    font-size: 1.5rem !important;
+}
+
+.swal2-content {
+    font-size: 1rem !important;
+}
+
+.swal2-confirm {
+    background-color: #dc3545 !important;
+}
+/* Dependency management styles */
+.dependencies-container {
+    border-top: 1px solid #dee2e6;
+    padding-top: 15px;
+}
+
+.dependencies-header h5 {
+    font-size: 1.1rem;
+}
+
+.current-dependencies h6,
+.add-dependency h6 {
+    font-size: 0.95rem;
+    margin-bottom: 10px;
+    color: #495057;
+}
+
+.dependency-list ul {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.dependency-list .list-group-item {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+}
+
+.dependency-list .remove-dependency-btn {
+    font-size: 0.8rem;
+    padding: 0.2rem 0.5rem;
+}
+
+.add-dependency .form-select {
+    font-size: 0.9rem;
+}
+
+.add-dependency .btn {
+    font-size: 0.9rem;
+}
+
+/* Animation for adding/removing dependencies */
+@keyframes highlight-dependency {
+    0% {
+        background-color: #cff4fc;
+    }
+    100% {
+        background-color: transparent;
+    }
+}
+
+.dependency-added {
+    animation: highlight-dependency 2s ease-out;
+}
+
+/* Tab styling for subtasks/dependencies */
+.subtasks-tabs {
+    margin-bottom: 15px;
+}
+
+.subtasks-tabs .nav-link {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+}
+
+.subtasks-tabs .nav-link.active {
+    font-weight: 500;
+}
+
+.subtasks-tabs .nav-link i {
+    margin-right: 5px;
+}

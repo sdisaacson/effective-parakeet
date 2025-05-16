@@ -846,6 +846,8 @@ function renderMeetingTable(meeting) {
 
 // Render goals table
 // Render goals table with subtasks
+// Update the renderGoalsTable function to include a delete button
+// Update the renderGoalsTable function to include dependency management
 function renderGoalsTable(goals) {
     console.log("Rendering goals table with:", goals);
     const tableBody = document.getElementById('goals-edit-table-body');
@@ -871,12 +873,15 @@ function renderGoalsTable(goals) {
             <td>${goal.meeting_id || ''}</td>
             <td>
                 <div class="d-flex">
-                    <button class="btn btn-sm btn-success save-goal-btn me-1">
+                    <button class="btn btn-sm btn-success save-goal-btn me-1" title="Save changes">
                         <i class="fas fa-save"></i>
                     </button>
-                    <button class="btn btn-sm btn-info toggle-subtasks-btn" title="Show/Hide Subtasks">
+                    <button class="btn btn-sm btn-info toggle-subtasks-btn me-1" title="Show/Hide Subtasks">
                         <i class="fas fa-tasks"></i>
                         <span class="subtask-count badge bg-secondary ms-1">${goal.subtasks?.length || 0}</span>
+                    </button>
+                    <button class="btn btn-sm btn-danger remove-goal-btn" title="Delete Goal">
+                        <i class="fas fa-trash-alt"></i>
                     </button>
                 </div>
             </td>
@@ -885,6 +890,11 @@ function renderGoalsTable(goals) {
         // Add event listener for the save button
         row.querySelector('.save-goal-btn').addEventListener('click', function() {
             saveGoalChanges(row, goal);
+        });
+        
+        // Add event listener for the remove button
+        row.querySelector('.remove-goal-btn').addEventListener('click', function() {
+            removeGoal(goal.id);
         });
         
         // Add event listeners for contenteditable cells
@@ -941,6 +951,9 @@ function renderGoalsTable(goals) {
         subtasksCell.appendChild(subtasksContent);
         subtasksRow.appendChild(subtasksCell);
         tableBody.appendChild(subtasksRow);
+        
+        // Add dependency management UI to the subtasks row
+        enhanceSubtasksRowWithDependencies(subtasksRow, goal);
         
         // Add event listener for toggle subtasks button
         row.querySelector('.toggle-subtasks-btn').addEventListener('click', function() {
@@ -1099,6 +1112,97 @@ function setupSubtaskEventListeners(container, goal) {
         });
     });
 }
+// Add a dependency management UI to the subtasks row
+function enhanceSubtasksRowWithDependencies(subtasksRow, goal) {
+    // Create a container for the dependencies section
+    const dependenciesContainer = document.createElement('div');
+    dependenciesContainer.className = 'dependencies-container mt-4';
+    
+    // Get available goals that can be dependencies (all goals except this one and any that would create cycles)
+    const availableGoals = currentGoalsData.filter(g => 
+        g.id !== goal.id && !wouldCreateCircularDependency(goal.id, g.id)
+    );
+    
+    // Create the dependencies section HTML
+    dependenciesContainer.innerHTML = `
+        <div class="dependencies-header d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0"><i class="fas fa-project-diagram me-2"></i>Dependencies for Goal #${goal.id}</h5>
+        </div>
+        
+        <div class="dependencies-content">
+            <!-- Current dependencies -->
+            <div class="current-dependencies mb-3">
+                <h6>Current Dependencies:</h6>
+                <div class="dependency-list">
+                    ${!goal.dependencies || goal.dependencies.length === 0 ? 
+                        '<p class="text-muted">No dependencies yet.</p>' :
+                        `<ul class="list-group">
+                            ${goal.dependencies.map(depId => {
+                                const depGoal = currentGoalsData.find(g => g.id === depId);
+                                return depGoal ? 
+                                    `<li class="list-group-item d-flex justify-content-between align-items-center">
+                                        <span>#${depGoal.id}: ${depGoal.name}</span>
+                                        <button class="btn btn-sm btn-danger remove-dependency-btn" data-dependency-id="${depGoal.id}">
+                                            <i class="fas fa-times"></i> Remove
+                                        </button>
+                                    </li>` : '';
+                            }).join('')}
+                        </ul>`
+                    }
+                </div>
+            </div>
+            
+            <!-- Add new dependency -->
+            <div class="add-dependency">
+                <h6>Add New Dependency:</h6>
+                ${availableGoals.length === 0 ? 
+                    '<p class="text-muted">No available goals to add as dependencies.</p>' :
+                    `<div class="input-group">
+                        <select class="form-select" id="dependency-select-${goal.id}">
+                            <option value="" selected disabled>Select a goal...</option>
+                            ${availableGoals.map(g => 
+                                `<option value="${g.id}">#${g.id}: ${g.name}</option>`
+                            ).join('')}
+                        </select>
+                        <button class="btn btn-primary add-dependency-btn" type="button">
+                            <i class="fas fa-plus"></i> Add
+                        </button>
+                    </div>`
+                }
+            </div>
+        </div>
+    `;
+    
+    // Add this container to the subtasks cell
+    const subtasksCell = subtasksRow.querySelector('td');
+    subtasksCell.appendChild(dependenciesContainer);
+    
+    // Add event listeners for dependency buttons
+    if (goal.dependencies && goal.dependencies.length > 0) {
+        dependenciesContainer.querySelectorAll('.remove-dependency-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const dependencyId = parseInt(this.getAttribute('data-dependency-id'));
+                removeDependency(goal.id, dependencyId);
+            });
+        });
+    }
+    
+    if (availableGoals.length > 0) {
+        const addBtn = dependenciesContainer.querySelector('.add-dependency-btn');
+        const select = dependenciesContainer.querySelector(`#dependency-select-${goal.id}`);
+        
+        addBtn.addEventListener('click', function() {
+            const dependencyId = parseInt(select.value);
+            if (dependencyId) {
+                addDependency(goal.id, dependencyId);
+            } else {
+                showToast('Please select a goal to add as dependency');
+            }
+        });
+    }
+    
+    return dependenciesContainer;
+}
 // Add a button above the goals table for adding new goals
 
 function enhanceGoalsTableWithAddButton() {
@@ -1180,7 +1284,118 @@ function addNewGoal() {
     // Show confirmation
     showToast('New goal added! Edit the details and save.');
 }
+// Function to add a dependency to a goal
+function addDependency(goalId, dependencyId) {
+    // Find the goal in the data array
+    const goal = currentGoalsData.find(g => g.id === goalId);
+    
+    if (!goal) {
+        console.error(`Goal with ID ${goalId} not found`);
+        showToast('Error: Goal not found');
+        return;
+    }
+    
+    // Initialize dependencies array if it doesn't exist
+    if (!goal.dependencies) {
+        goal.dependencies = [];
+    }
+    
+    // Check if the dependency already exists
+    if (goal.dependencies.includes(dependencyId)) {
+        showToast('This dependency already exists');
+        return;
+    }
+    
+    // Check if this would create a circular dependency
+    if (wouldCreateCircularDependency(goalId, dependencyId)) {
+        showToast('Cannot add: This would create a circular dependency');
+        return;
+    }
+    
+    // Add the dependency
+    goal.dependencies.push(dependencyId);
+    
+    // Show a confirmation message
+    const dependencyGoal = currentGoalsData.find(g => g.id === dependencyId);
+    showToast(`Added "${dependencyGoal.name}" as a dependency`);
+    
+    // Re-render the goals table and update visualization
+    renderGoalsTable(currentGoalsData);
+    refreshVisualization();
+}
 
+// Function to remove a dependency from a goal
+function removeDependency(goalId, dependencyId) {
+    // Find the goal in the data array
+    const goal = currentGoalsData.find(g => g.id === goalId);
+    
+    if (!goal || !goal.dependencies) {
+        console.error(`Goal with ID ${goalId} not found or has no dependencies`);
+        showToast('Error: Goal or dependencies not found');
+        return;
+    }
+    
+    // Check if the dependency exists
+    const index = goal.dependencies.indexOf(dependencyId);
+    if (index === -1) {
+        showToast('This dependency does not exist');
+        return;
+    }
+    
+    // Remove the dependency
+    goal.dependencies.splice(index, 1);
+    
+    // Show a confirmation message
+    const dependencyGoal = currentGoalsData.find(g => g.id === dependencyId);
+    showToast(`Removed "${dependencyGoal.name}" as a dependency`);
+    
+    // Re-render the goals table and update visualization
+    renderGoalsTable(currentGoalsData);
+    refreshVisualization();
+}
+
+// Helper function to check if adding a dependency would create a circular reference
+function wouldCreateCircularDependency(goalId, dependencyId) {
+    // If we're trying to make a goal depend on itself, that's circular
+    if (goalId === dependencyId) {
+        return true;
+    }
+    
+    // Check if the dependency already depends on this goal (directly or indirectly)
+    const dependencyGoal = currentGoalsData.find(g => g.id === dependencyId);
+    if (!dependencyGoal || !dependencyGoal.dependencies || dependencyGoal.dependencies.length === 0) {
+        return false; // No dependencies, so no cycles
+    }
+    
+    // Check if any of the dependency's dependencies would create a cycle
+    const visited = new Set();
+    const toCheck = [...dependencyGoal.dependencies];
+    
+    while (toCheck.length > 0) {
+        const currentId = toCheck.pop();
+        
+        // If we've visited this node already, skip it
+        if (visited.has(currentId)) {
+            continue;
+        }
+        
+        // Mark as visited
+        visited.add(currentId);
+        
+        // If this is the original goal, we have a cycle
+        if (currentId === goalId) {
+            return true;
+        }
+        
+        // Add this goal's dependencies to check
+        const currentGoal = currentGoalsData.find(g => g.id === currentId);
+        if (currentGoal && currentGoal.dependencies) {
+            toCheck.push(...currentGoal.dependencies);
+        }
+    }
+    
+    return false;
+}
 
 // Save meeting changes
 function saveMeetingChanges(row, meeting) {
@@ -1203,6 +1418,34 @@ function saveGoalChanges(row, goal) {
     showToast('Goal information saved successfully!');
 }
 
+// Function to remove a goal
+function removeGoal(goalId) {
+    // Find the index of the goal in the currentGoalsData array
+    const index = currentGoalsData.findIndex(goal => goal.id === goalId);
+    
+    if (index !== -1) {
+        // Get the goal's name for the confirmation message
+        const goalName = currentGoalsData[index].name;
+        
+        // Ask for confirmation
+        if (confirm(`Are you sure you want to delete the goal "${goalName}"?`)) {
+            // Remove the goal from the array
+            currentGoalsData.splice(index, 1);
+            
+            // Re-render the goals table
+            renderGoalsTable(currentGoalsData);
+            
+            // Show a confirmation message
+            showToast(`Goal "${goalName}" has been removed`);
+            
+            // Optionally, trigger a refresh of the visualization
+            refreshVisualization();
+        }
+    } else {
+        console.error(`Goal with ID ${goalId} not found`);
+        showToast('Error: Goal not found');
+    }
+}
 // Show a toast message
 function showToast(message) {
     // Create toast element
