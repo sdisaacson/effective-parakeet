@@ -1,4 +1,13 @@
 // Main JavaScript for the Action Item Extractor with Cytoscape.js graph visualization
+// Add these declarations at the top of your file, right after the first comment line
+// Global function references
+let globalRenderMeetingInfo;
+let globalGetAllAssignees;
+let globalRenderTeamMembers;
+let globalRenderKnowledgeGraph;
+let globalRenderGoalCard;
+let globalRenderGoalRow;
+let globalInitGraphControls;
 
 document.addEventListener('DOMContentLoaded', function() {
     // Form submission handler
@@ -9,6 +18,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const goalsGrid = document.getElementById('goals-grid');
     const listView = document.getElementById('list-view');
     const goalsTableBody = document.getElementById('goals-table-body');
+    
+    // Global storage for the current data
+    let currentMeetingData = null;
+    let currentGoalsData = [];
     
     // Cytoscape instance for graph visualization
     let cy = null;
@@ -51,12 +64,21 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('Response data:', data);
             
             if (response.ok) {
+                // Make sure data.goals and data.meeting are valid
+                if (!data.goals || !Array.isArray(data.goals) || !data.meeting) {
+                    console.error('Invalid data structure:', data);
+                    throw new Error('Invalid response data structure');
+                }
+                
                 // Process and display the results with meeting info
                 renderResults(data.goals, data.meeting);
                 
                 // Hide loading indicator, show results
                 loadingIndicator.style.display = 'none';
                 resultsContainer.style.display = 'block';
+                
+                // Show the data editing section explicitly
+                document.getElementById('data-editing-section').style.display = 'block';
             } else {
                 // Handle errors
                 console.error('API error:', data.detail || 'Unknown error');
@@ -101,6 +123,8 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Render the results
     function renderResults(goals, meeting) {
+        console.log("Rendering results with:", { goals, meeting });
+        
         // Clear previous results
         goalsGrid.innerHTML = '';
         goalsTableBody.innerHTML = '';
@@ -128,6 +152,9 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Initialize zoom and layout buttons
         initGraphControls();
+        
+        // Display data tables for editing
+        displayDataTables(meeting, goals);
     }
     
     // Extract all unique assignees
@@ -713,6 +740,13 @@ document.addEventListener('DOMContentLoaded', function() {
         
         goalsTableBody.appendChild(row);
     }
+    globalRenderMeetingInfo = renderMeetingInfo;
+    globalGetAllAssignees = getAllAssignees;
+    globalRenderTeamMembers = renderTeamMembers;
+    globalRenderKnowledgeGraph = renderKnowledgeGraph;
+    globalRenderGoalCard = renderGoalCard;
+    globalRenderGoalRow = renderGoalRow;
+    globalInitGraphControls = initGraphControls;
 });
 
 // Function to show goal in graph from list view
@@ -740,3 +774,636 @@ function showGoalInGraph(goalId) {
         }
     }
 }
+// Data Table Functionality
+
+// Global variables are now defined at the top of the script.js file
+// let currentMeetingData = null;
+// let currentGoalsData = []; 
+
+// Function to initialize data tables
+function initDataTables() {
+    // Add event listener for the refresh button
+    document.getElementById('refresh-viz-btn').addEventListener('click', function() {
+        refreshVisualization();
+    });
+}
+
+// Function to display data tables
+function displayDataTables(meeting, goals) {
+    console.log("Displaying data tables with:", { meeting, goals });
+    
+    // Store the current data globally
+    currentMeetingData = meeting;
+    currentGoalsData = goals;
+    
+    // Show the data editing section
+    document.getElementById('data-editing-section').style.display = 'block';
+    
+    // Render meeting data
+    renderMeetingTable(meeting);
+    
+    // Render goals data
+    renderGoalsTable(goals);
+    
+    // Add the "Add Goal" button
+    enhanceGoalsTableWithAddButton();
+}
+
+// Render meeting table
+function renderMeetingTable(meeting) {
+    const tableBody = document.getElementById('meeting-table-body');
+    tableBody.innerHTML = '';
+    
+    const row = document.createElement('tr');
+    row.innerHTML = `
+        <td>${meeting.id}</td>
+        <td contenteditable="true" data-field="title">${meeting.title}</td>
+        <td contenteditable="true" data-field="date">${meeting.date || ''}</td>
+        <td contenteditable="true" data-field="summary">${meeting.summary}</td>
+        <td>
+            <button class="btn btn-sm btn-success save-meeting-btn">
+                <i class="fas fa-save"></i>
+            </button>
+        </td>
+    `;
+    
+    // Add event listener for the save button
+    row.querySelector('.save-meeting-btn').addEventListener('click', function() {
+        saveMeetingChanges(row, meeting);
+    });
+    
+    // Add event listeners for contenteditable cells
+    const editableCells = row.querySelectorAll('[contenteditable="true"]');
+    editableCells.forEach(cell => {
+        cell.addEventListener('blur', function() {
+            const field = this.dataset.field;
+            meeting[field] = this.textContent;
+        });
+    });
+    
+    tableBody.appendChild(row);
+}
+
+// Render goals table
+// Render goals table with subtasks
+function renderGoalsTable(goals) {
+    console.log("Rendering goals table with:", goals);
+    const tableBody = document.getElementById('goals-edit-table-body');
+    tableBody.innerHTML = '';
+    
+    goals.forEach(goal => {
+        // Create the main goal row
+        const row = document.createElement('tr');
+        row.className = 'goal-row';
+        row.setAttribute('data-goal-id', goal.id);
+        row.innerHTML = `
+            <td>${goal.id}</td>
+            <td contenteditable="true" data-field="name">${goal.name}</td>
+            <td contenteditable="true" data-field="description">${goal.description}</td>
+            <td>
+                <select class="form-select form-select-sm" data-field="priority">
+                    <option value="High" ${goal.priority === 'High' ? 'selected' : ''}>High</option>
+                    <option value="Medium" ${goal.priority === 'Medium' ? 'selected' : ''}>Medium</option>
+                    <option value="Low" ${goal.priority === 'Low' ? 'selected' : ''}>Low</option>
+                </select>
+            </td>
+            <td contenteditable="true" data-field="assignees">${goal.assignees.join(', ')}</td>
+            <td>${goal.meeting_id || ''}</td>
+            <td>
+                <div class="d-flex">
+                    <button class="btn btn-sm btn-success save-goal-btn me-1">
+                        <i class="fas fa-save"></i>
+                    </button>
+                    <button class="btn btn-sm btn-info toggle-subtasks-btn" title="Show/Hide Subtasks">
+                        <i class="fas fa-tasks"></i>
+                        <span class="subtask-count badge bg-secondary ms-1">${goal.subtasks?.length || 0}</span>
+                    </button>
+                </div>
+            </td>
+        `;
+        
+        // Add event listener for the save button
+        row.querySelector('.save-goal-btn').addEventListener('click', function() {
+            saveGoalChanges(row, goal);
+        });
+        
+        // Add event listeners for contenteditable cells
+        const editableCells = row.querySelectorAll('[contenteditable="true"]');
+        editableCells.forEach(cell => {
+            cell.addEventListener('blur', function() {
+                const field = this.dataset.field;
+                if (field === 'assignees') {
+                    // Convert comma-separated string to array
+                    goal[field] = this.textContent.split(',').map(item => item.trim()).filter(item => item);
+                } else {
+                    goal[field] = this.textContent;
+                }
+            });
+        });
+        
+        // Add event listener for priority dropdown
+        const prioritySelect = row.querySelector('select[data-field="priority"]');
+        prioritySelect.addEventListener('change', function() {
+            goal.priority = this.value;
+        });
+        
+        // Add the goal row to the table
+        tableBody.appendChild(row);
+        
+        // Create subtasks row
+        const subtasksRow = document.createElement('tr');
+        subtasksRow.className = 'subtasks-row';
+        subtasksRow.style.display = 'none'; // Hidden by default
+        subtasksRow.setAttribute('data-goal-id', goal.id);
+        
+        // Create a cell that spans the entire table
+        const subtasksCell = document.createElement('td');
+        subtasksCell.setAttribute('colspan', '7');
+        subtasksCell.className = 'p-3 bg-light';
+        
+        // Create subtasks content
+        const subtasksContent = document.createElement('div');
+        subtasksContent.className = 'subtasks-container';
+        
+        // Add header and "Add New" button
+        subtasksContent.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0"><i class="fas fa-tasks me-2"></i>Subtasks for Goal #${goal.id}</h5>
+                <button class="btn btn-sm btn-primary add-subtask-btn">
+                    <i class="fas fa-plus me-1"></i>Add New Subtask
+                </button>
+            </div>
+            <div class="subtasks-list">
+                ${goal.subtasks && goal.subtasks.length > 0 ? renderSubtasksList(goal.subtasks, goal.id) : '<p class="text-muted">No subtasks yet.</p>'}
+            </div>
+        `;
+        
+        subtasksCell.appendChild(subtasksContent);
+        subtasksRow.appendChild(subtasksCell);
+        tableBody.appendChild(subtasksRow);
+        
+        // Add event listener for toggle subtasks button
+        row.querySelector('.toggle-subtasks-btn').addEventListener('click', function() {
+            if (subtasksRow.style.display === 'none') {
+                subtasksRow.style.display = 'table-row';
+                this.querySelector('i').className = 'fas fa-chevron-up';
+            } else {
+                subtasksRow.style.display = 'none';
+                this.querySelector('i').className = 'fas fa-tasks';
+            }
+        });
+        
+        // Add event listener for "Add New Subtask" button
+        subtasksRow.querySelector('.add-subtask-btn').addEventListener('click', function() {
+            addNewSubtask(goal, subtasksRow.querySelector('.subtasks-list'));
+        });
+    });
+}
+
+// Helper function to render subtasks list
+function renderSubtasksList(subtasks, goalId) {
+    return `
+        <table class="table table-sm subtasks-table">
+            <thead>
+                <tr>
+                    <th width="60">ID</th>
+                    <th>Name</th>
+                    <th width="100">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${subtasks.map(subtask => `
+                    <tr data-subtask-id="${subtask.id}">
+                        <td>${subtask.id}</td>
+                        <td contenteditable="true" data-field="name">${subtask.name}</td>
+                        <td>
+                            <button class="btn btn-sm btn-success save-subtask-btn me-1" title="Save changes">
+                                <i class="fas fa-save"></i>
+                            </button>
+                            <button class="btn btn-sm btn-danger remove-subtask-btn" title="Remove subtask">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+// Function to add a new subtask
+function addNewSubtask(goal, container) {
+    if (!goal.subtasks) {
+        goal.subtasks = [];
+    }
+    
+    // Generate a new ID for the subtask 
+    // (in a real app, this would come from the backend)
+    const newId = goal.subtasks.length > 0 
+        ? Math.max(...goal.subtasks.map(st => st.id)) + 1 
+        : 1;
+    
+    // Create the new subtask
+    const newSubtask = {
+        id: newId,
+        name: `New Subtask ${newId}`
+    };
+    
+    // Add to the goal's subtasks array
+    goal.subtasks.push(newSubtask);
+    
+    // Update the UI
+    container.innerHTML = renderSubtasksList(goal.subtasks, goal.id);
+    
+    // Update subtask count badge
+    const goalRow = document.querySelector(`.goal-row[data-goal-id="${goal.id}"]`);
+    if (goalRow) {
+        const badge = goalRow.querySelector('.subtask-count');
+        if (badge) {
+            badge.textContent = goal.subtasks.length;
+        }
+    }
+    
+    // Add event listeners to new elements
+    setupSubtaskEventListeners(container, goal);
+    
+    // Show a confirmation message
+    showToast('New subtask added!');
+}
+
+// Set up event listeners for subtask elements
+function setupSubtaskEventListeners(container, goal) {
+    // Save buttons
+    container.querySelectorAll('.save-subtask-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const row = this.closest('tr');
+            const subtaskId = parseInt(row.getAttribute('data-subtask-id'));
+            const nameCell = row.querySelector('[data-field="name"]');
+            
+            // Find and update the subtask
+            const subtask = goal.subtasks.find(st => st.id === subtaskId);
+            if (subtask) {
+                subtask.name = nameCell.textContent;
+                showToast('Subtask updated!');
+            }
+        });
+    });
+    
+    // Remove buttons
+    container.querySelectorAll('.remove-subtask-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const row = this.closest('tr');
+            const subtaskId = parseInt(row.getAttribute('data-subtask-id'));
+            
+            // Remove the subtask from the array
+            const index = goal.subtasks.findIndex(st => st.id === subtaskId);
+            if (index !== -1) {
+                goal.subtasks.splice(index, 1);
+                
+                // Update the UI
+                container.innerHTML = goal.subtasks.length > 0 
+                    ? renderSubtasksList(goal.subtasks, goal.id) 
+                    : '<p class="text-muted">No subtasks yet.</p>';
+                
+                // If we still have subtasks, reattach event listeners
+                if (goal.subtasks.length > 0) {
+                    setupSubtaskEventListeners(container, goal);
+                }
+                
+                // Update subtask count badge
+                const goalRow = document.querySelector(`.goal-row[data-goal-id="${goal.id}"]`);
+                if (goalRow) {
+                    const badge = goalRow.querySelector('.subtask-count');
+                    if (badge) {
+                        badge.textContent = goal.subtasks.length;
+                    }
+                }
+                
+                showToast('Subtask removed!');
+            }
+        });
+    });
+    
+    // Edit cells
+    container.querySelectorAll('[contenteditable="true"]').forEach(cell => {
+        cell.addEventListener('blur', function() {
+            const row = this.closest('tr');
+            const subtaskId = parseInt(row.getAttribute('data-subtask-id'));
+            const field = this.dataset.field;
+            
+            // Find and update the subtask
+            const subtask = goal.subtasks.find(st => st.id === subtaskId);
+            if (subtask) {
+                subtask[field] = this.textContent;
+            }
+        });
+    });
+}
+// Add a button above the goals table for adding new goals
+
+function enhanceGoalsTableWithAddButton() {
+    const tableContainer = document.getElementById('goals-edit-table').closest('.table-responsive');
+    
+    // Check if we already added the button to avoid duplicates
+    if (!document.getElementById('add-goal-btn')) {
+        // Create button container
+        const buttonContainer = document.createElement('div');
+        buttonContainer.className = 'd-flex justify-content-end mb-3';
+        
+        // Create the add button
+        const addButton = document.createElement('button');
+        addButton.id = 'add-goal-btn';
+        addButton.className = 'btn btn-primary';
+        addButton.innerHTML = '<i class="fas fa-plus me-2"></i>Add New Goal';
+        addButton.addEventListener('click', addNewGoal);
+        
+        // Add button to container
+        buttonContainer.appendChild(addButton);
+        
+        // Insert before the table
+        tableContainer.parentNode.insertBefore(buttonContainer, tableContainer);
+    }
+}
+
+// Function to add a new goal
+function addNewGoal() {
+    // Generate a new goal ID (in a real app, this would come from the backend)
+    const newId = currentGoalsData.length > 0 
+        ? Math.max(...currentGoalsData.map(g => g.id)) + 1 
+        : 1;
+    
+    // Create a new goal with default values
+    const newGoal = {
+        id: newId,
+        name: `New Goal ${newId}`,
+        description: "Description for this goal",
+        priority: "Medium",
+        assignees: ["Unassigned"],
+        subtasks: [],
+        dependencies: [],
+        meeting_id: currentMeetingData.id  // Link to current meeting
+    };
+    
+    // Add to the global goals array
+    currentGoalsData.push(newGoal);
+    
+    // Re-render the goals table
+    renderGoalsTable(currentGoalsData);
+    
+    // Scroll to the new goal and highlight it
+    setTimeout(() => {
+        const newGoalRow = document.querySelector(`.goal-row[data-goal-id="${newId}"]`);
+        if (newGoalRow) {
+            newGoalRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            newGoalRow.classList.add('highlight-new');
+            
+            // Focus on the name field for immediate editing
+            const nameCell = newGoalRow.querySelector('[data-field="name"]');
+            if (nameCell) {
+                nameCell.focus();
+                
+                // Select all text in the cell
+                const selection = window.getSelection();
+                const range = document.createRange();
+                range.selectNodeContents(nameCell);
+                selection.removeAllRanges();
+                selection.addRange(range);
+            }
+            
+            // Remove highlight after animation completes
+            setTimeout(() => {
+                newGoalRow.classList.remove('highlight-new');
+            }, 3000);
+        }
+    }, 100);
+    
+    // Show confirmation
+    showToast('New goal added! Edit the details and save.');
+}
+
+
+// Save meeting changes
+function saveMeetingChanges(row, meeting) {
+    // Update the current meeting data
+    currentMeetingData = meeting;
+    
+    // Show a success message
+    showToast('Meeting information saved successfully!');
+}
+
+// Save goal changes
+function saveGoalChanges(row, goal) {
+    // Update the goal in the currentGoalsData array
+    const index = currentGoalsData.findIndex(g => g.id === goal.id);
+    if (index !== -1) {
+        currentGoalsData[index] = goal;
+    }
+    
+    // Show a success message
+    showToast('Goal information saved successfully!');
+}
+
+// Show a toast message
+function showToast(message) {
+    // Create toast element
+    const toast = document.createElement('div');
+    toast.className = 'toast-message';
+    toast.textContent = message;
+    
+    // Append to body
+    document.body.appendChild(toast);
+    
+    // Show and then hide after a delay
+    setTimeout(() => {
+        toast.classList.add('show');
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => {
+                toast.remove();
+            }, 300);
+        }, 3000);
+    }, 100);
+}
+
+// Fixed refresh visualization function and event binding
+
+// Make sure initDataTables is called at the right time
+function initDataTables() {
+    console.log("Initializing data tables and controls");
+    
+    // Find the refresh button
+    const refreshBtn = document.getElementById('refresh-viz-btn');
+    
+    if (refreshBtn) {
+        console.log("Refresh button found, adding event listener");
+        
+        // Remove any existing event listeners to avoid duplicates
+        refreshBtn.removeEventListener('click', refreshVisualization);
+        
+        // Add event listener for the refresh button
+        refreshBtn.addEventListener('click', function() {
+            console.log("Refresh button clicked");
+            refreshVisualization();
+        });
+    } else {
+        console.warn("Refresh button not found in the DOM yet");
+    }
+}
+
+// Enhanced refresh visualization function with better error handling
+    console.log("Refreshing visualization with data:", { 
+        meeting: currentMeetingData, 
+        goals: currentGoalsData 
+    });
+    
+    try {
+        // Make sure we have data to work with
+        if (!currentMeetingData || !currentGoalsData || currentGoalsData.length === 0) {
+            console.error("Cannot refresh - missing data");
+            showToast('Error: Missing data for visualization');
+            return;
+        }
+        
+        // Update the meeting info display using global function references
+        globalRenderMeetingInfo(currentMeetingData);
+        
+        // Clear and recreate the graph visualization
+        document.getElementById('team-container').innerHTML = '';
+        
+        // Get all assignees from updated data using global function references
+        const allAssignees = globalGetAllAssignees(currentGoalsData);
+        
+        // Render team members section with updated data
+        globalRenderTeamMembers(allAssignees, currentGoalsData);
+        
+        // Destroy previous Cytoscape instance if it exists
+        if (typeof cy !== 'undefined' && cy) {
+            console.log("Destroying previous Cytoscape instance");
+            cy.destroy();
+        } else {
+            console.warn("No existing Cytoscape instance found");
+        }
+        
+        // Render knowledge graph with updated data
+        globalRenderKnowledgeGraph(currentGoalsData, allAssignees);
+        
+        // Clear and render goals cards
+        const goalsGrid = document.getElementById('goals-grid');
+        goalsGrid.innerHTML = '';
+        
+        const goalsTableBody = document.getElementById('goals-table-body');
+        goalsTableBody.innerHTML = '';
+        
+        // Render goals with updated data
+        currentGoalsData.forEach(goal => {
+            globalRenderGoalCard(goal, currentGoalsData);
+            globalRenderGoalRow(goal, currentGoalsData);
+        });
+        
+        // Initialize graph controls again
+        globalInitGraphControls();
+        
+        // Show a success message
+        showToast('Visualization refreshed with updated data!');
+        console.log("Visualization refresh complete");
+    } catch (error) {
+        console.error("Error during visualization refresh:", error);
+        showToast('Error refreshing visualization: ' + error.message);
+    }
+}
+
+// Make sure event listeners are attached at the right time
+document.addEventListener('DOMContentLoaded', function() {
+    // This will be called once the DOM is fully loaded
+    console.log("DOM loaded, initializing data tables");
+    
+    // Wait a short time for any dynamic elements to be added
+    setTimeout(function() {
+        initDataTables();
+    }, 500);
+});
+
+// Modify the displayDataTables function to ensure initDataTables is called after rendering
+function displayDataTables(meeting, goals) {
+    console.log("Displaying data tables with:", { meeting, goals });
+    
+    // Store the current data globally
+    currentMeetingData = meeting;
+    currentGoalsData = goals;
+    
+    // Show the data editing section
+    document.getElementById('data-editing-section').style.display = 'block';
+    
+    // Render meeting data
+    renderMeetingTable(meeting);
+    
+    // Render goals data
+    renderGoalsTable(goals);
+    
+    // Add the "Add Goal" button
+    enhanceGoalsTableWithAddButton();
+    
+    // Initialize data tables controls AFTER rendering
+    setTimeout(function() {
+        initDataTables();
+    }, 100);
+}
+
+// Add the CSS for the toast messages
+document.addEventListener('DOMContentLoaded', function() {
+    // Create a style element
+    const style = document.createElement('style');
+    style.textContent = `
+        .toast-message {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: #28a745;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 4px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.3s, transform 0.3s;
+        }
+        
+        .toast-message.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    `;
+    
+    // Append to head
+    document.head.appendChild(style);
+    
+    // Initialize data tables
+    initDataTables();
+});
+// Add a dedicated button to show/hide the data editing section
+const editButton = document.createElement('button');
+editButton.id = 'edit-data-btn';
+editButton.className = 'btn btn-primary ms-2';
+editButton.innerHTML = '<i class="fas fa-edit me-1"></i>Review and Edit Data';
+editButton.addEventListener('click', function() {
+    const dataSection = document.getElementById('data-editing-section');
+    if (dataSection.style.display === 'none') {
+        dataSection.style.display = 'block';
+        this.innerHTML = '<i class="fas fa-times me-1"></i>Hide Data Editor';
+        
+        // Scroll to the data section
+        dataSection.scrollIntoView({ behavior: 'smooth' });
+    } else {
+        dataSection.style.display = 'none';
+        this.innerHTML = '<i class="fas fa-edit me-1"></i>Review and Edit Data';
+    }
+});
+
+// Add the button to the UI next to the toggle view button
+document.addEventListener('DOMContentLoaded', function() {
+    const toggleViewBtn = document.getElementById('toggle-view-btn');
+    if (toggleViewBtn) {
+        toggleViewBtn.parentNode.appendChild(editButton);
+    }
+});

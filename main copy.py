@@ -12,7 +12,6 @@ import json
 import logging
 import traceback
 from dotenv import load_dotenv
-from datetime import datetime
 
 # Configure logging
 logging.basicConfig(
@@ -30,7 +29,6 @@ app = FastAPI(title="Action Item Extractor")
 # Mount static files and templates
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
-
 class PriorityEnum(str, Enum):
     high = "High"
     medium = "Medium"
@@ -62,7 +60,6 @@ class Meeting(BaseModel):
     date: Optional[str] = Field(None, description="Meeting date if mentioned")
     summary: str = Field(description="Brief summary of the meeting")
 
-
 # Service functions
 async def generate_goals(transcript: str, meeting_id: int) -> List[Goal]:
     """Generate goals from a transcript using OpenAI"""
@@ -82,7 +79,7 @@ async def generate_goals(transcript: str, meeting_id: int) -> List[Goal]:
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Error creating AsyncOpenAI client: {str(e)}")
     
-    try:
+     try:
         logger.info("Making async API call to generate goals")
         response = await client.chat.completions.create(
             model="gpt-4o",
@@ -107,11 +104,13 @@ async def generate_goals(transcript: str, meeting_id: int) -> List[Goal]:
         
         logger.info(f"Successfully generated {len(goals)} goals")
         return goals
+        
+        logger.info(f"Successfully generated {len(goals)} goals")
+        return goals
     except Exception as e:
         logger.error(f"Error generating goals: {str(e)}")
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Error generating goals: {str(e)}")
-
 
 async def extract_meeting_info(transcript: str) -> Meeting:
     """Extract structured meeting information from transcripts."""
@@ -139,24 +138,18 @@ async def extract_meeting_info(transcript: str) -> Meeting:
             ]
         )
         
-        # Generate a unique ID for the meeting based on timestamp
-        response.id = int(datetime.now().timestamp())
-        
         logger.info(f"Successfully extracted meeting information: {response}")
         return response
     except Exception as e:
         logger.error(f"Error extracting meeting information: {str(e)}")
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Error extracting meeting information: {str(e)}")
-
-
 # Routes
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
     """Render the main page"""
     logger.info("Rendering index page")
     return templates.TemplateResponse("index.html", {"request": request})
-
 
 # Update the /process endpoint
 @app.post("/process")
@@ -166,14 +159,13 @@ async def process_transcript(transcript: str = Form(...)):
     logger.debug(f"Transcript length: {len(transcript)} characters")
     
     try:
-        # Extract meeting information first to get the meeting ID
+        # Generate goals from transcript
+        logger.info("Generating goals from transcript")
+        goals = await generate_goals(transcript)
+        
+        # Extract meeting information
         logger.info("Extracting meeting information from transcript")
         meeting_info = await extract_meeting_info(transcript)
-        
-        # Generate goals from transcript with the meeting ID
-        logger.info("Generating goals from transcript")
-        goals = await generate_goals(transcript, meeting_info.id)
-        
         goals_dict = []
         for goal in goals:
             try:
@@ -199,7 +191,6 @@ async def process_transcript(transcript: str = Form(...)):
         logger.error(f"Unexpected error processing transcript: {str(e)}")
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Error processing transcript: {str(e)}")
-
 
 # For development server with better error reporting
 if __name__ == "__main__":

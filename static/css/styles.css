@@ -178,3 +178,206 @@
     transform: translateY(-5px);
     box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
 }
+/* Data table styling */
+#data-editing-section .table {
+    font-size: 0.9rem;
+}
+
+#data-editing-section [contenteditable="true"] {
+    padding: 3px;
+    border-radius: 3px;
+    transition: background-color 0.2s;
+}
+
+#data-editing-section [contenteditable="true"]:hover {
+    background-color: #f8f9fa;
+}
+
+#data-editing-section [contenteditable="true"]:focus {
+    background-color: #e9ecef;
+    outline: none;
+}
+
+#refresh-viz-btn {
+    transition: transform 0.3s;
+}
+
+#refresh-viz-btn:hover {
+    transform: rotate(15deg);
+}
+
+/* Toast message styling */
+.toast-message {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background-color: #28a745;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 4px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.3s, transform 0.3s;
+}
+
+.toast-message.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Table cell editing styles */
+#goals-edit-table td, #meeting-table td {
+    vertical-align: middle;
+}
+
+#goals-edit-table td[contenteditable="true"], #meeting-table td[contenteditable="true"] {
+    min-width: 100px;
+}
+
+/* Make description cells wider */
+#goals-edit-table td[data-field="description"] {
+    min-width: 250px;
+}
+
+/* Make summary cells wider */
+#meeting-table td[data-field="summary"] {
+    min-width: 300px;
+}
+
+/* Highlight editing */
+[contenteditable="true"]:focus {
+    box-shadow: inset 0 0 0 2px rgba(13, 110, 253, 0.25);
+}
+
+/* Styling for save buttons */
+.save-meeting-btn, .save-goal-btn {
+    transition: all 0.2s;
+}
+
+.save-meeting-btn:hover, .save-goal-btn:hover {
+    background-color: #198754;
+}
+
+/* Subtask styling */
+.subtasks-row {
+    background-color: #f8f9fa;
+}
+
+.subtasks-container {
+    padding: 15px;
+    border-radius: 5px;
+    background-color: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.subtasks-table {
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.subtasks-table thead {
+    background-color: #e9ecef;
+}
+
+.subtasks-table th,
+.subtasks-table td {
+    padding: 8px 12px;
+    vertical-align: middle;
+}
+
+.toggle-subtasks-btn {
+    transition: all 0.2s;
+}
+
+.toggle-subtasks-btn:hover {
+    background-color: #17a2b8;
+    color: white;
+}
+
+.toggle-subtasks-btn .badge {
+    font-size: 0.7rem;
+}
+
+.add-subtask-btn {
+    font-size: 0.85rem;
+}
+
+.subtasks-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+/* Animated transitions for subtask rows */
+.subtasks-row {
+    transition: all 0.3s ease-in-out;
+}
+
+/* Highlight new subtasks */
+.subtasks-table tr:last-child {
+    animation: highlight-row 2s ease-out;
+}
+
+@keyframes highlight-row {
+    0% {
+        background-color: #d4edda;
+    }
+    100% {
+        background-color: transparent;
+    }
+}
+
+/* Goal row hover effect */
+.goal-row {
+    transition: background-color 0.2s;
+}
+
+.goal-row:hover {
+    background-color: rgba(0, 123, 255, 0.05);
+}
+
+/* Expandable row indicator */
+.toggle-subtasks-btn {
+    position: relative;
+}
+
+.toggle-subtasks-btn i {
+    transition: transform 0.2s;
+}
+
+/* Focused subtask styles */
+.subtasks-table [contenteditable="true"]:focus {
+    box-shadow: inset 0 0 0 2px rgba(13, 110, 253, 0.25);
+    background-color: #fff;
+}
+/* New goal highlight animation */
+@keyframes highlight-new-goal {
+    0% {
+        background-color: #d4edda;
+        box-shadow: 0 0 15px rgba(40, 167, 69, 0.5);
+    }
+    100% {
+        background-color: transparent;
+        box-shadow: none;
+    }
+}
+
+.highlight-new {
+    animation: highlight-new-goal 3s ease-out;
+}
+
+/* Add Goal button styling */
+#add-goal-btn {
+    transition: all 0.2s;
+}
+
+#add-goal-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+#add-goal-btn:active {
+    transform: translateY(0);
+}
