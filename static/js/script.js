@@ -702,3 +702,104 @@ function showGoalInGraph(goalId) {
         }
     }
 }
+// Update the form submission event handler
+form.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    // Show loading indicator
+    loadingIndicator.style.display = 'block';
+    resultsContainer.style.display = 'none';
+    
+    const transcript = document.getElementById('transcript').value;
+    
+    try {
+        const formData = new FormData();
+        formData.append('transcript', transcript);
+        
+        console.log('Submitting transcript to /process endpoint');
+        const response = await fetch('/process', {
+            method: 'POST',
+            body: formData
+        });
+        
+        console.log('Response status:', response.status);
+        const data = await response.json();
+        console.log('Response data:', data);
+        
+        if (response.ok) {
+            // Process and display the results
+            renderResults(data.goals, data.meeting);
+            
+            // Hide loading indicator, show results
+            loadingIndicator.style.display = 'none';
+            resultsContainer.style.display = 'block';
+        } else {
+            // Handle errors
+            console.error('API error:', data.detail || 'Unknown error');
+            throw new Error(data.detail || 'An error occurred');
+        }
+    } catch (error) {
+        console.error('Error processing transcript:', error);
+        loadingIndicator.style.display = 'none';
+        alert(`Error: ${error.message}`);
+    }
+});
+
+// Update the renderResults function to include meeting info
+function renderResults(goals, meetingInfo) {
+    // Clear previous results
+    goalsGrid.innerHTML = '';
+    goalsTableBody.innerHTML = '';
+    document.getElementById('team-container').innerHTML = '';
+    
+    // Render meeting information
+    renderMeetingInfo(meetingInfo);
+    
+    // Get all assignees
+    const allAssignees = getAllAssignees(goals);
+    
+    // Render team members section
+    renderTeamMembers(allAssignees, goals);
+    
+    // Render knowledge graph visualization
+    renderKnowledgeGraph(goals, allAssignees);
+    
+    // Render goals in grid view
+    goals.forEach(goal => {
+        renderGoalCard(goal, goals);
+        renderGoalRow(goal, goals);
+    });
+    
+    // Initialize zoom and layout buttons
+    initGraphControls();
+}
+
+// Add a new function to render meeting info
+function renderMeetingInfo(meeting) {
+    console.log('Rendering meeting info:', meeting);
+    const meetingContainer = document.getElementById('meeting-info-container');
+    
+    if (meeting) {
+        // Show the container
+        meetingContainer.style.display = 'block';
+        
+        // Set meeting title
+        const titleElement = document.getElementById('meeting-title');
+        titleElement.textContent = meeting.title || 'Untitled Meeting';
+        
+        // Set meeting date if available
+        const dateElement = document.getElementById('meeting-date');
+        if (meeting.date) {
+            dateElement.innerHTML = `<i class="fas fa-calendar-alt me-2"></i>${meeting.date}`;
+        } else {
+            dateElement.innerHTML = ''; // No date available
+        }
+        
+        // Set meeting summary
+        const summaryElement = document.getElementById('meeting-summary');
+        summaryElement.textContent = meeting.summary || 'No summary available';
+    } else {
+        // Hide the container if no meeting info
+        meetingContainer.style.display = 'none';
+    }
+}

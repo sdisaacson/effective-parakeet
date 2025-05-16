@@ -2,7 +2,7 @@ import instructor
 from openai import AsyncOpenAI
 from typing import Iterable, List, Optional
 from enum import Enum
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi import FastAPI, Request, Form, HTTPException
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -53,6 +53,12 @@ class Goal(BaseModel):
     subtasks: Optional[List[Subtask]] = []
     dependencies: Optional[List[int]] = []
 
+class Meeting(BaseModel):
+    """Structured information about the meeting from the transcript"""
+    title: str = Field(description="Meeting title or purpose")
+    date: Optional[str] = Field(None, description="Meeting date if mentioned")
+    summary: str = Field(description="Brief summary of the meeting")
+
 
 # Service functions
 async def generate_goals(transcript: str) -> List[Goal]:
@@ -101,7 +107,38 @@ async def generate_goals(transcript: str) -> List[Goal]:
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Error generating goals: {str(e)}")
 
-
+async def extract_meeting_info(transcript: str) -> Meeting:
+    """Extract structured meeting information from transcripts."""
+    # Check for API key
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        logger.error("OpenAI API key not found in environment variables")
+        raise HTTPException(status_code=500, detail="OpenAI API key not found. Please set OPENAI_API_KEY environment variable.")
+    
+    try:
+        client = instructor.from_openai(AsyncOpenAI(api_key=api_key))
+        
+        response = await client.chat.completions.create(
+            model="gpt-4o",
+            response_model=Meeting,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Extract detailed meeting information from this file."
+                },
+                {
+                    "role": "user",
+                    "content": f"Extract the complete meeting details from this file: {transcript}"
+                }
+            ]
+        )
+        
+        logger.info(f"Successfully extracted meeting information: {response}")
+        return response
+    except Exception as e:
+        logger.error(f"Error extracting meeting information: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Error extracting meeting information: {str(e)}")
 # Routes
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
@@ -109,17 +146,21 @@ async def read_root(request: Request):
     logger.info("Rendering index page")
     return templates.TemplateResponse("index.html", {"request": request})
 
-
+# Update the /process endpoint
 @app.post("/process")
 async def process_transcript(transcript: str = Form(...)):
-    """Process a transcript and return goals"""
+    """Process a transcript and return goals and meeting information"""
     logger.info("Received request to process transcript")
     logger.debug(f"Transcript length: {len(transcript)} characters")
     
     try:
+        # Generate goals from transcript
         logger.info("Generating goals from transcript")
         goals = await generate_goals(transcript)
-        # Convert to dict for JSON serialization
+        
+        # Extract meeting information
+        logger.info("Extracting meeting information from transcript")
+        meeting_info = await extract_meeting_info(transcript)
         goals_dict = []
         for goal in goals:
             try:
@@ -131,9 +172,13 @@ async def process_transcript(transcript: str = Form(...)):
                 logger.error(traceback.format_exc())
                 raise HTTPException(status_code=500, detail=f"Error processing goal data: {str(e)}")
         
-        logger.info(f"Successfully processed {len(goals_dict)} goals")
+        meeting_dict = meeting_info.dict()
+        
+        logger.info(f"Successfully processed {len(goals_dict)} goals and meeting information")
         logger.debug(f"Goals data: {json.dumps(goals_dict)}")
-        return JSONResponse(content={"goals": goals_dict})
+        logger.debug(f"Meeting info: {json.dumps(meeting_dict)}")
+        
+        return JSONResponse(content={"goals": goals_dict, "meeting": meeting_dict})
     except HTTPException as e:
         logger.error(f"HTTP exception occurred: {e.detail}")
         raise e
@@ -141,7 +186,6 @@ async def process_transcript(transcript: str = Form(...)):
         logger.error(f"Unexpected error processing transcript: {str(e)}")
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Error processing transcript: {str(e)}")
-
 
 # For development server with better error reporting
 if __name__ == "__main__":

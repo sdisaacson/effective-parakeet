@@ -145,3 +145,36 @@
 .collapsible-header:hover {
     background-color: rgba(0, 0, 0, 0.03);
 }
+/* Meeting info styling */
+.meeting-summary-container {
+    background-color: #f8f9fa;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    margin-top: 1rem;
+}
+
+.meeting-summary {
+    line-height: 1.6;
+    margin-bottom: 0;
+}
+
+#meeting-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #212529;
+}
+
+#meeting-date {
+    font-size: 0.9rem;
+    color: #6c757d;
+}
+
+/* Meeting info card hover effect */
+#meeting-info-container .card {
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+#meeting-info-container .card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+}
