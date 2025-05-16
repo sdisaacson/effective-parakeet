@@ -10,7 +10,6 @@ Icon
 .vscode/
 *.code-workspace
 .history/
-fly.toml
 # Python
 __pycache__/
 *.py[cod]
