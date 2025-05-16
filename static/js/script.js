@@ -1251,6 +1251,8 @@ function initDataTables() {
 }
 
 // Enhanced refresh visualization function with better error handling
+// Enhanced refresh visualization function with better error handling
+function refreshVisualization() {
     console.log("Refreshing visualization with data:", { 
         meeting: currentMeetingData, 
         goals: currentGoalsData 
