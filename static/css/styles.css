@@ -1,0 +1,147 @@
+/* Custom styles for the Action Item Extractor */
+
+/* Card styling */
+.card {
+    border: none;
+    border-radius: 0.5rem;
+    margin-bottom: 2rem;
+}
+
+.card-header {
+    border-bottom: none;
+    padding: 1.25rem 1.5rem;
+    border-radius: 0.5rem 0.5rem 0 0 !important;
+}
+
+.card-body {
+    padding: 1.5rem;
+}
+
+/* Workflow visualization */
+.workflow-container {
+    overflow: hidden;
+    min-height: 500px;
+}
+
+#cy-container {
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    background-color: #f9fafb;
+}
+
+/* Cytoscape node tooltips */
+.cy-tooltip {
+    position: absolute;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    z-index: 9999;
+    pointer-events: none;
+}
+
+/* Layout buttons */
+.btn-group .btn.active {
+    background-color: #0d6efd;
+    color: white;
+}
+
+/* Priority indicators */
+.priority-high {
+    background-color: rgba(220, 53, 69, 0.1);
+    color: #dc3545;
+    border-left: 4px solid #dc3545;
+}
+
+.priority-medium {
+    background-color: rgba(255, 193, 7, 0.1);
+    color: #fd7e14;
+    border-left: 4px solid #fd7e14;
+}
+
+.priority-low {
+    background-color: rgba(13, 110, 253, 0.1);
+    color: #0d6efd;
+    border-left: 4px solid #0d6efd;
+}
+
+/* Badge styling */
+.badge-high {
+    background-color: #dc3545;
+}
+
+.badge-medium {
+    background-color: #fd7e14;
+}
+
+.badge-low {
+    background-color: #0d6efd;
+}
+
+/* Assignee tags */
+.assignee-tag {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    margin: 0.25rem;
+    border-radius: 2rem;
+    font-size: 0.8rem;
+    background-color: #e9ecef;
+}
+
+/* Subtask styling */
+.subtask-item {
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
+    border-radius: 0.25rem;
+    background-color: #f8f9fa;
+}
+
+/* Dependency tags */
+.dependency-tag {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    margin: 0.25rem;
+    border-radius: 0.25rem;
+    font-size: 0.8rem;
+    background-color: rgba(255, 193, 7, 0.2);
+    color: #fd7e14;
+}
+
+/* Team member cards */
+.team-member-card {
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    background-color: rgba(13, 110, 253, 0.1);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .card-header {
+        padding: 1rem;
+    }
+    
+    .card-body {
+        padding: 1rem;
+    }
+}
+
+/* Goal card hover effect */
+.goal-card {
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.goal-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+}
+
+/* Collapsible sections */
+.collapsible-header {
+    cursor: pointer;
+}
+
+.collapsible-header:hover {
+    background-color: rgba(0, 0, 0, 0.03);
+}
